@@ -10,7 +10,7 @@ use_wandb: false
 
 dataset:
   comp_dataset:  eedi-mining-misconceptions-in-mathematics
-  input_dataset: conjuring92/eedi-embed-pretrain-mix-expanded
+  input_dataset: conjuring92/eedi-embed-pretrain-mix-final # conjuring92/eedi-embed-pretrain-mix-expanded
   fold_dataset: conjuring92/eedi-five-folds
 
 model:
