@@ -1,6 +1,7 @@
 import logging
 import math
 import os
+
 import shutil
 import uuid
 from collections import defaultdict
@@ -62,7 +63,9 @@ class AverageMeter(object):
         if self.count == n:  # First update
             self.avg = val
         else:
-            self.avg = self.alpha * val + (1 - self.alpha) * self.avg  # Apply exponential smoothing
+            self.avg = (
+                self.alpha * val + (1 - self.alpha) * self.avg
+            )  # Apply exponential smoothing
 
 
 def save_checkpoint(cfg, state, is_best):
@@ -96,7 +99,9 @@ class EMA:
         for name, param in self.model.named_parameters():
             if param.requires_grad:
                 assert name in self.shadow
-                new_average = (1.0 - self.decay) * param.data + self.decay * self.shadow[name]
+                new_average = (
+                    1.0 - self.decay
+                ) * param.data + self.decay * self.shadow[name]
                 self.shadow[name] = new_average.clone()
 
     def apply_shadow(self):
@@ -171,7 +176,9 @@ def setup_training_run(cfg):
     return accelerator
 
 
-def get_custom_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1):
+def get_custom_cosine_schedule_with_warmup(
+    optimizer, num_warmup_steps, num_training_steps, num_cycles=0.5, last_epoch=-1
+):
     """
     Create a schedule with a learning rate that decreases from the initial lr set in the optimizer to 10% of it,
     following a cosine curve, after a warmup period during which it increases linearly from 0 to the initial lr set in the optimizer.
@@ -192,7 +199,9 @@ def get_custom_cosine_schedule_with_warmup(optimizer, num_warmup_steps, num_trai
             return float(current_step) / float(max(1, num_warmup_steps))
 
         # Progress after warmup
-        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+        progress = float(current_step - num_warmup_steps) / float(
+            max(1, num_training_steps - num_warmup_steps)
+        )
         cosine_decay = 0.5 * (1 + math.cos(math.pi * num_cycles * 2.0 * progress))
 
         # Scale to decay to 10% of the max lr
@@ -272,14 +281,22 @@ def eedi_process_df(df, debug=False):
             for col in ["SubjectId", "SubjectName", "ConstructName", "QuestionText"]:
                 this_example[col] = info[col]
 
-            this_example["CorrectAnswerText"] = info[f"Answer{info['CorrectAnswer']}Text"]
+            this_example["CorrectAnswerText"] = info[
+                f"Answer{info['CorrectAnswer']}Text"
+            ]
             this_example["InCorrectAnswerText"] = info[f"Answer{answer_key}Text"]
-            this_example["AllOptionText"] = "\n- ".join([info[f"Answer{x}Text"] for x in ["A", "B", "C", "D"]])
+            this_example["AllOptionText"] = "\n- ".join(
+                [info[f"Answer{x}Text"] for x in ["A", "B", "C", "D"]]
+            )
             this_example["AllOptionText"] = f"\n- {this_example['AllOptionText']}"
             queries.append(this_example)
     # --
     query_df = pd.DataFrame(queries)
-    corr_df = pd.Series(query2content).reset_index().rename(columns={"index": "query_id", 0: "content_id"})
+    corr_df = (
+        pd.Series(query2content)
+        .reset_index()
+        .rename(columns={"index": "query_id", 0: "content_id"})
+    )
     corr_df["content_id"] = corr_df["content_id"].apply(lambda x: x[0])
 
     query_df = query_df.reset_index(drop=True)
@@ -302,7 +319,9 @@ def download_kaggle_dataset(handle: str):
 
 def train_valid_split(cfg, df):
     fold_dir = download_kaggle_dataset(cfg.dataset.fold_dataset)
-    fold_df = pd.read_parquet(os.path.join(fold_dir, "folds.parquet")).rename(columns={"QuestionId": "query_id"})
+    fold_df = pd.read_parquet(os.path.join(fold_dir, "folds.parquet")).rename(
+        columns={"QuestionId": "query_id"}
+    )
     df = pd.merge(df, fold_df, on="query_id", how="left")
     df["kfold"] = df["kfold"].fillna(99).astype(int)
     print(f"# of folds: {df['kfold'].nunique()}")
@@ -326,7 +345,9 @@ def train_valid_split(cfg, df):
 
 def add_fs_examples(df, content2query, query2example, rng, is_train=False, k_shot=2):
     def _add_examples(row):
-        qids = content2query[int(row["content_id"])]  # content2query is a defaultdict(list)
+        qids = content2query[
+            int(row["content_id"])
+        ]  # content2query is a defaultdict(list)
         qids = [qid for qid in qids if qid != row["query_id"]]
 
         if is_train:  # for training use random number of few shot examples

@@ -5,9 +5,15 @@ from transformers import AutoTokenizer, AwqConfig
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_path", type=str, default="../models/qwen_pointwise_32b_merged")
-    parser.add_argument("--quant_path", type=str, default="../models/qwen_pointwise_32b_merged_awq")
-    parser.add_argument("--calib_data", type=str, default="rbiswasfc/eedi-awq-calibration-oracle-new")
+    parser.add_argument(
+        "--model_path", type=str, default="../models/qwen_pointwise_32b_merged"
+    )
+    parser.add_argument(
+        "--quant_path", type=str, default="../models/qwen_pointwise_32b_merged_awq"
+    )
+    parser.add_argument(
+        "--calib_data", type=str, default="rbiswasfc/eedi-awq-calibration-oracle-new"
+    )
     parser.add_argument("--max_calib_seq_len", type=int, default=1024)
     args = parser.parse_args()
 
@@ -16,13 +22,23 @@ if __name__ == "__main__":
     calib_data = args.calib_data
     max_calib_seq_len = args.max_calib_seq_len
 
-    quant_config = {"zero_point": True, "q_group_size": 64, "w_bit": 4, "version": "GEMM"}
+    quant_config = {
+        "zero_point": True,
+        "q_group_size": 64,
+        "w_bit": 4,
+        "version": "GEMM",
+    }
 
     # Load model
     model = AutoAWQForCausalLM.from_pretrained(model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=False)
 
-    model.quantize(tokenizer, quant_config=quant_config, calib_data=calib_data, max_calib_seq_len=max_calib_seq_len)
+    model.quantize(
+        tokenizer,
+        quant_config=quant_config,
+        calib_data=calib_data,
+        max_calib_seq_len=max_calib_seq_len,
+    )
 
     quantization_config = AwqConfig(
         bits=quant_config["w_bit"],

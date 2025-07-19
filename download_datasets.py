@@ -1,4 +1,7 @@
 import kagglehub
+import os
+
+os.environ["KAGGLEHUB_CACHE"] = "dataset"
 
 
 def download_dataset(handle: str) -> None:

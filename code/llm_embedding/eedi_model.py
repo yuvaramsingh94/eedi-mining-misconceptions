@@ -21,7 +21,9 @@ class EmbedderOutput(ModelOutput):
 
 
 def get_base_model(cfg):
-    config = AutoConfig.from_pretrained(cfg.model.backbone_path, trust_remote_code=cfg.model.trust_remote_code)
+    config = AutoConfig.from_pretrained(
+        cfg.model.backbone_path, trust_remote_code=cfg.model.trust_remote_code,cache_dir=cfg.huggingface_cache,
+    )
     config.use_cache = False
 
     if cfg.model.use_bnb:
@@ -37,6 +39,7 @@ def get_base_model(cfg):
             quantization_config=bnb_config,
             attn_implementation=cfg.model.attn_implementation,
             trust_remote_code=cfg.model.trust_remote_code,
+            cache_dir=cfg.huggingface_cache,
         )
     else:
         model = AutoModel.from_pretrained(
@@ -45,6 +48,7 @@ def get_base_model(cfg):
             attn_implementation=cfg.model.attn_implementation,
             trust_remote_code=cfg.model.trust_remote_code,
             torch_dtype=torch.bfloat16,
+            cache_dir=cfg.huggingface_cache,
         )
     model.config.pretraining_tp = 1
 
@@ -81,9 +85,13 @@ class BiEncoderModel(nn.Module):
         self.sentence_pooling_method = cfg.model.sentence_pooling_method
 
         self.accelerator = accelerator
-        self.negatives_cross_device = cfg.model.negatives_cross_device  # accelerator.use_distributed
+        self.negatives_cross_device = (
+            cfg.model.negatives_cross_device
+        )  # accelerator.use_distributed
         if self.negatives_cross_device:
-            assert accelerator.use_distributed, "Distributed training is required for negatives_cross_device"
+            assert (
+                accelerator.use_distributed
+            ), "Distributed training is required for negatives_cross_device"
 
         self.world_size = accelerator.num_processes
         self.process_rank = accelerator.process_index
@@ -95,14 +103,19 @@ class BiEncoderModel(nn.Module):
     def gradient_checkpointing_enable(self, **kwargs):
         self.model.gradient_checkpointing_enable(**kwargs)
 
-    def last_token_pool(self, last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
+    def last_token_pool(
+        self, last_hidden_states: Tensor, attention_mask: Tensor
+    ) -> Tensor:
         left_padding = attention_mask[:, -1].sum() == attention_mask.shape[0]
         if left_padding:
             return last_hidden_states[:, -1]
         else:
             sequence_lengths = attention_mask.sum(dim=1) - 1
             batch_size = last_hidden_states.shape[0]
-            return last_hidden_states[torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths]
+            return last_hidden_states[
+                torch.arange(batch_size, device=last_hidden_states.device),
+                sequence_lengths,
+            ]
 
     def sentence_embedding(self, hidden_state, mask):
         if self.sentence_pooling_method == "mean":
@@ -120,13 +133,21 @@ class BiEncoderModel(nn.Module):
             for i in range(0, len(features["attention_mask"]), self.sub_batch_size):
                 end_inx = min(i + self.sub_batch_size, len(features["attention_mask"]))
                 sub_features = {k: v[i:end_inx] for k, v in features.items()}
-                last_hidden_state = self.model(**sub_features, return_dict=True).last_hidden_state
-                p_reps = self.sentence_embedding(last_hidden_state, sub_features["attention_mask"])
+                last_hidden_state = self.model(
+                    **sub_features, return_dict=True
+                ).last_hidden_state
+                p_reps = self.sentence_embedding(
+                    last_hidden_state, sub_features["attention_mask"]
+                )
                 all_p_reps.append(p_reps)
             all_p_reps = torch.cat(all_p_reps, 0).contiguous()
         else:
-            last_hidden_state = self.model(**features, return_dict=True).last_hidden_state
-            all_p_reps = self.sentence_embedding(last_hidden_state, features["attention_mask"])
+            last_hidden_state = self.model(
+                **features, return_dict=True
+            ).last_hidden_state
+            all_p_reps = self.sentence_embedding(
+                last_hidden_state, features["attention_mask"]
+            )
 
         return all_p_reps.contiguous()
 
@@ -165,18 +186,26 @@ class BiEncoderModel(nn.Module):
 
         # print(f"loss: {loss}, nce_loss: {nce_loss}, distill_loss: {distill_loss}")
 
-        return EmbedderOutput(loss=loss, scores=scores, nce_loss=nce_loss, distill_loss=distill_loss)
+        return EmbedderOutput(
+            loss=loss, scores=scores, nce_loss=nce_loss, distill_loss=distill_loss
+        )
 
     def compute_loss(self, scores, target):
         return self.cross_entropy(scores, target)
 
-    def compute_distillation_loss(self, scores, teacher_scores, teacher_temperature=1.25):
+    def compute_distillation_loss(
+        self, scores, teacher_scores, teacher_temperature=1.25
+    ):
         # print(f"scores: {scores.shape}, teacher_scores: {teacher_scores.shape}")
         # print(f"scores: {scores}")
         # print(f"teacher_scores: {teacher_scores}")
-        teacher_targets = F.softmax(teacher_scores.detach() / teacher_temperature, dim=-1)  # (n, m)
+        teacher_targets = F.softmax(
+            teacher_scores.detach() / teacher_temperature, dim=-1
+        )  # (n, m)
         # print(f"teacher_targets: {teacher_targets}")
-        loss = -torch.mean(torch.sum(torch.log_softmax(scores, dim=-1) * teacher_targets, dim=-1))
+        loss = -torch.mean(
+            torch.sum(torch.log_softmax(scores, dim=-1) * teacher_targets, dim=-1)
+        )
         return loss
 
     def _dist_gather_tensor(self, t: Optional[torch.Tensor]):
@@ -194,5 +223,7 @@ class BiEncoderModel(nn.Module):
 
     def save(self, output_dir: str):
         state_dict = self.model.state_dict()
-        state_dict = type(state_dict)({k: v.clone().cpu() for k, v in state_dict.items()})
+        state_dict = type(state_dict)(
+            {k: v.clone().cpu() for k, v in state_dict.items()}
+        )
         self.model.save_pretrained(output_dir, state_dict=state_dict)

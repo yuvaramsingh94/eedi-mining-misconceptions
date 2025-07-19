@@ -3,7 +3,12 @@ from transformers import AutoTokenizer
 
 
 def get_tokenizer(cfg):
-    tokenizer = AutoTokenizer.from_pretrained(cfg.model.backbone_path, add_eos_token=cfg.model.add_eos_token)
+    tokenizer = AutoTokenizer.from_pretrained(
+        cfg.model.backbone_path,
+        cache_dir=cfg.huggingface_cache,
+        add_eos_token=cfg.model.add_eos_token,
+        # force_download=True,
+    )
     if tokenizer.pad_token is None:
         if tokenizer.unk_token is not None:
             tokenizer.pad_token = tokenizer.unk_token
@@ -29,7 +34,11 @@ class MathDataset:
     def __init__(self, cfg, query_formatting_func=None):
         self.cfg = cfg
         self.tokenizer = get_tokenizer(cfg)
-        self.query_formatting_func = query_formatting_func if query_formatting_func is not None else _formatting_func
+        self.query_formatting_func = (
+            query_formatting_func
+            if query_formatting_func is not None
+            else _formatting_func
+        )
 
     def pre_process(self, df, is_query, is_train, rng):
         def _get_query(row):
@@ -69,7 +78,11 @@ class MathDataset:
             return_token_type_ids=False,
             return_length=True,
         )
-        return {"input_ids": tokenized["input_ids"], "attention_mask": tokenized["attention_mask"], "input_length": tokenized["length"]}
+        return {
+            "input_ids": tokenized["input_ids"],
+            "attention_mask": tokenized["attention_mask"],
+            "input_length": tokenized["length"],
+        }
 
     def get_dataset(self, df, is_query=True, is_train=False, rng=None):
         df = df.copy()
